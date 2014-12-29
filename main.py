@@ -38,6 +38,8 @@ launchpad_user = None
 
 def process_launchpad_authorization():
     global launchpad_user
+    # FIXME: store keys in session for every user (probably uuids)
+    # then retrieve launchpad instance from App-level dict
     credentials = Credentials()
     SimpleLaunchpad.set_credentials_consumer(credentials,
                                              "launchpad-reporting-www")
@@ -319,6 +321,24 @@ def code_freeze_report(milestone_name):
             milestone=[milestone_name],
             teams=teams,
             exclude_tags=exclude_tags)
+
+    # private bugs PoC here
+    bugs_private = launchpad_user.code_freeze_statistic(
+        milestone=[milestone_name],
+        teams=teams,
+        exclude_tags=exclude_tags)
+
+    for team in bugs_private.keys():
+        try:
+            for bug in bugs_private[team]["bugs"]:
+                bugs[team]["bugs"].append(bug)
+        except KeyError:
+            pass
+    for team in bugs_private.keys():
+        try:
+            bugs[team]["count"] += bugs_private[team]["count"]
+        except KeyError:
+            pass
 
     return render_template("code_freeze_report.html",
                            milestones=milestones,
