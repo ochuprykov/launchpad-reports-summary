@@ -8,8 +8,6 @@ import pytz
 from dateutil import relativedelta, parser
 from datetime import datetime
 
-from launchpad_reporting.launchpad import LaunchpadAnonymousClient
-
 
 class Bug(object):
     def __init__(self, dictionary):
@@ -119,6 +117,7 @@ def serialize_bug(bug, task=None):
 
 
 def load_project_bugs(project_name, db, queue, stop_event):
+    from launchpad_reporting.launchpad import LaunchpadAnonymousClient
     launchpad = LaunchpadAnonymousClient()
     project = launchpad._get_project(project_name)
 
