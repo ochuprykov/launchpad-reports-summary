@@ -146,7 +146,15 @@ tr.critical-bugs {
 }
 
 tr.private-bugs {
-  color: green !important
+  color: #00cc66 !important
+}
+
+tr.private-security-bugs {
+  color: #009999 !important
+}
+
+tr.proprietary-bugs {
+  color: #660066 !important
 }
 
 th.headerSortUp {
