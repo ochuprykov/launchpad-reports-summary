@@ -5,6 +5,7 @@ import argparse
 import os
 import json
 import time
+from functools import wraps
 
 from flask import (Flask, request, render_template, json as flask_json,
                    redirect, session, url_for)
@@ -83,12 +84,33 @@ def process_launchpad_authorization():
         return (True, auth_url, False)
 
 
+def launchpad_auth_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        should_redirect, lp_url, is_authorized = process_launchpad_authorization()
+        if should_redirect:
+            return redirect(lp_url)
+        try:
+            kwargs.update({'is_authorized': is_authorized})
+            return f(*args, **kwargs)
+        except Exception as e:
+            if 'access_token_parts' in session:
+                del session['access_token_parts']
+            if hasattr(e, "content") and "Expired token" in e.content:
+                should_redirect, lp_url, is_authorized = process_launchpad_authorization()
+                print should_redirect, lp_url, is_authorized
+                if should_redirect:
+                    return redirect(lp_url)
+            else:
+                raise e
+
+    return decorated
+
+
 @app.route('/project/<project_name>/bug_table_for_status/<bug_type>/'
            '<milestone_name>/bug_list/')
-def bug_list(project_name, bug_type, milestone_name):
-    should_redirect, lp_url, is_authorized = process_launchpad_authorization()
-    if should_redirect:
-        return redirect(lp_url)
+@launchpad_auth_required
+def bug_list(project_name, bug_type, milestone_name, is_authorized=False):
     project = launchpad.get_project(project_name)
     tags = None
 
@@ -103,6 +125,7 @@ def bug_list(project_name, bug_type, milestone_name):
         milestone_name=milestone_name, tags=tags)
 
     return render_template("bug_list.html",
+                           is_authorized=is_authorized,
                            project=project,
                            bugs=bugs,
                            bug_type=bug_type,
@@ -115,10 +138,8 @@ def bug_list(project_name, bug_type, milestone_name):
 
 @app.route('/project/<project_name>/bug_list_for_sbpr/<milestone_name>/'
            '<bug_type>/<sbpr>')
-def bug_list_for_sbpr(project_name, bug_type, milestone_name, sbpr):
-    should_redirect, lp_url, is_authorized = process_launchpad_authorization()
-    if should_redirect:
-        return redirect(lp_url)
+@launchpad_auth_required
+def bug_list_for_sbpr(project_name, bug_type, milestone_name, sbpr, is_authorized=False):
     subprojects = [sbpr]
 
     if sbpr == 'all':
@@ -155,6 +176,7 @@ def bug_list_for_sbpr(project_name, bug_type, milestone_name, sbpr):
                                        importance=bug_importance)))
 
     return render_template("bug_table_sbpr.html",
+                           is_authorized=is_authorized,
                            project=project_name,
                            prs=list(db.prs),
                            bugs=bugs,
@@ -167,10 +189,8 @@ def bug_list_for_sbpr(project_name, bug_type, milestone_name, sbpr):
 
 
 @app.route("/iso_build/<version>/<iso_number>/<result>")
-def iso_build_result(version, iso_number, result):
-    should_redirect, lp_url, is_authorized = process_launchpad_authorization()
-    if should_redirect:
-        return redirect(lp_url)
+@launchpad_auth_required
+def iso_build_result(version, iso_number, result, is_authorized=False):
     data = {"version": version, "iso_number": iso_number,
             "build_date": time.strftime("%d %b %Y %H:%M:%S", time.gmtime()),
             "build_status": result, "tests_results": {}}
@@ -187,10 +207,8 @@ def iso_build_result(version, iso_number, result):
 
 
 @app.route("/iso_tests/<version>/<iso_number>/<tests_name>/<result>")
-def iso_tests_result(version, iso_number, tests_name, result):
-    should_redirect, lp_url, is_authorized = process_launchpad_authorization()
-    if should_redirect:
-        return redirect(lp_url)
+@launchpad_auth_required
+def iso_tests_result(version, iso_number, tests_name, result, is_authorized=False):
     status = "FAIL"
 
     need_add = True
@@ -216,30 +234,28 @@ def iso_tests_result(version, iso_number, tests_name, result):
 
 
 @app.route('/mos_images/<version>/')
-def mos_images_status(version):
-    should_redirect, lp_url, is_authorized = process_launchpad_authorization()
-    if should_redirect:
-        return redirect(lp_url)
+@launchpad_auth_required
+def mos_images_status(version, is_authorized=False):
     images = list(db.mos.images.find())
     tests_types = list(db.mos.tests_types.find())
     images_versions = list(db.mos.images_versions.find())
 
     return render_template("iso_status.html", version=version,
+                           is_authorized=is_authorized,
                            project="mos_images", images=images,
                            images_versions=images_versions,
                            prs=list(db.prs), tests_types=tests_types)
 
 
 @app.route('/mos_images_auto/<version>/')
-def mos_images_status_auto(version):
-    should_redirect, lp_url, is_authorized = process_launchpad_authorization()
-    if should_redirect:
-        return redirect(lp_url)
+@launchpad_auth_required
+def mos_images_status_auto(version, is_authorized=False):
     images = list(db.mos.images.find())
     tests_types = list(db.mos.tests_types.find())
     images_versions = list(db.mos.images_versions.find())
 
     return render_template("iso_status_auto.html", version=version,
+                           is_authorized=is_authorized,
                            project="mos_images", images=images,
                            images_versions=images_versions,
                            tests_types=tests_types)
@@ -247,10 +263,8 @@ def mos_images_status_auto(version):
 
 @app.route('/project/<project_name>/api/release_chart_trends/'
            '<milestone_name>/get_data')
-def bug_report_trends_data(project_name, milestone_name):
-    should_redirect, lp_url, is_authorized = process_launchpad_authorization()
-    if should_redirect:
-        return redirect(lp_url)
+@launchpad_auth_required
+def bug_report_trends_data(project_name, milestone_name, is_authorized=False):
     data = launchpad.release_chart(
         project_name,
         milestone_name
@@ -261,10 +275,8 @@ def bug_report_trends_data(project_name, milestone_name):
 
 @app.route('/project/<project_name>/api/release_chart_incoming_outgoing/'
            '<milestone_name>/get_data')
-def bug_report_get_incoming_outgoing_data(project_name, milestone_name):
-    should_redirect, lp_url, is_authorized = process_launchpad_authorization()
-    if should_redirect:
-        return redirect(lp_url)
+@launchpad_auth_required
+def bug_report_get_incoming_outgoing_data(project_name, milestone_name, is_authorized=False):
     data = launchpad.release_chart(
         project_name,
         milestone_name
@@ -274,16 +286,15 @@ def bug_report_get_incoming_outgoing_data(project_name, milestone_name):
 
 @app.route('/project/<project_name>/bug_table_for_status/'
            '<bug_type>/<milestone_name>')
-def bug_table_for_status(project_name, bug_type, milestone_name):
-    should_redirect, lp_url, is_authorized = process_launchpad_authorization()
-    if should_redirect:
-        return redirect(lp_url)
+@launchpad_auth_required
+def bug_table_for_status(project_name, bug_type, milestone_name, is_authorized=False):
     project = launchpad.get_project(project_name)
 
     if bug_type == "New":
         milestone_name = None
 
     return render_template("bug_table.html",
+                           is_authorized=is_authorized,
                            project=project,
                            prs=list(db.prs),
                            key_milestone=key_milestone,
@@ -292,12 +303,11 @@ def bug_table_for_status(project_name, bug_type, milestone_name):
 
 
 @app.route('/project/<project_name>/bug_trends/<milestone_name>/')
-def bug_trends(project_name, milestone_name):
-    should_redirect, lp_url, is_authorized = process_launchpad_authorization()
-    if should_redirect:
-        return redirect(lp_url)
+@launchpad_auth_required
+def bug_trends(project_name, milestone_name, is_authorized=False):
     project = launchpad.get_project(project_name)
     return render_template("bug_trends.html",
+                           is_authorized=is_authorized,
                            project=project,
                            milestone_name=milestone_name,
                            selected_bug_trends=True,
@@ -307,10 +317,8 @@ def bug_trends(project_name, milestone_name):
 
 
 @app.route('/project/code_freeze_report/<milestone_name>/')
-def code_freeze_report(milestone_name):
-    should_redirect, lp_url, is_authorized = process_launchpad_authorization()
-    if should_redirect:
-        return redirect(lp_url)
+@launchpad_auth_required
+def code_freeze_report(milestone_name, is_authorized=False):
     milestones = db.bugs.milestones.find_one()["Milestone"]
     teams = ["Fuel", "Partners", "mos-linux", "mos-openstack", "Unknown"]
     exclude_tags = ["devops", "docs", "fuel-devops", "experimental", "system-tests"]
@@ -341,6 +349,7 @@ def code_freeze_report(milestone_name):
         bugs[team]["count"] += bugs_private[team]["count"]
 
     return render_template("code_freeze_report.html",
+                           is_authorized=is_authorized,
                            milestones=milestones,
                            current_milestone=milestone_name,
                            prs=list(db.prs),
@@ -351,11 +360,9 @@ def code_freeze_report(milestone_name):
 
 
 @app.route('/project/<project_name>/<milestone_name>/project_statistic/<tag>/')
+@launchpad_auth_required
 def statistic_for_project_by_milestone_by_tag(project_name, milestone_name,
-                                              tag):
-    should_redirect, lp_url, is_authorized = process_launchpad_authorization()
-    if should_redirect:
-        return redirect(lp_url)
+                                              tag, is_authorized=False):
     display = True
     project = launchpad.get_project(project_name)
 
@@ -373,6 +380,7 @@ def statistic_for_project_by_milestone_by_tag(project_name, milestone_name,
         milestone["id"] = data[project_name][milestone_name]
 
     return render_template("project.html",
+                           is_authorized=is_authorized,
                            project=project,
                            key_milestone=key_milestone,
                            selected_overview=True,
@@ -387,10 +395,8 @@ def statistic_for_project_by_milestone_by_tag(project_name, milestone_name,
 
 
 @app.route('/project/<project_name>/<milestone_name>/project_statistic/')
-def statistic_for_project_by_milestone(project_name, milestone_name):
-    should_redirect, lp_url, is_authorized = process_launchpad_authorization()
-    if should_redirect:
-        return redirect(lp_url)
+@launchpad_auth_required
+def statistic_for_project_by_milestone(project_name, milestone_name, is_authorized=False):
     display = False
     project = launchpad.get_project(project_name)
     if project_name in ("mos", "fuel"):
@@ -409,6 +415,7 @@ def statistic_for_project_by_milestone(project_name, milestone_name):
         milestone["id"] = data[project_name][milestone_name]
 
     return render_template("project.html",
+                           is_authorized=is_authorized,
                            key_milestone=key_milestone,
                            project=project,
                            selected_overview=True,
@@ -422,10 +429,8 @@ def statistic_for_project_by_milestone(project_name, milestone_name):
 
 
 @app.route('/project/fuelplusmos/<milestone_name>/')
-def fuel_plus_mos_overview(milestone_name):
-    should_redirect, lp_url, is_authorized = process_launchpad_authorization()
-    if should_redirect:
-        return redirect(lp_url)
+@launchpad_auth_required
+def fuel_plus_mos_overview(milestone_name, is_authorized=False):
     milestones = db.bugs.milestones.find_one()["Milestone"]
 
     subprojects = list(db.subprs)
@@ -545,6 +550,7 @@ def fuel_plus_mos_overview(milestone_name):
                 tags=subprojects))
 
     return render_template("project_fuelmos.html",
+                           is_authorized=is_authorized,
                            milestones=milestones,
                            key_milestone=key_milestone,
                            current_milestone=milestone_name,
@@ -562,7 +568,8 @@ def fuel_plus_mos_overview(milestone_name):
 
 
 @app.route('/project/<project_name>/')
-def project_overview(project_name):
+@launchpad_auth_required
+def project_overview(project_name, is_authorized=False):
     should_redirect, lp_url, is_authorized = process_launchpad_authorization()
     if should_redirect:
         return redirect(lp_url)
@@ -585,6 +592,7 @@ def project_overview(project_name):
         tag=None)
 
     return render_template("project.html",
+                           is_authorized=is_authorized,
                            project=project,
                            key_milestone=key_milestone,
                            selected_overview=True,
@@ -596,10 +604,8 @@ def project_overview(project_name):
 
 
 @app.route('/project/<global_project_name>/<tag>/')
-def mos_project_overview(global_project_name, tag):
-    should_redirect, lp_url, is_authorized = process_launchpad_authorization()
-    if should_redirect:
-        return redirect(lp_url)
+@launchpad_auth_required
+def mos_project_overview(global_project_name, tag, is_authorized=False):
     global_project_name = global_project_name.lower()
     tag = tag.lower()
 
@@ -610,6 +616,7 @@ def mos_project_overview(global_project_name, tag):
         tag=tag)
 
     return render_template("project.html",
+                           is_authorized=is_authorized,
                            project=project,
                            key_milestone=key_milestone,
                            tag=tag,
@@ -632,10 +639,8 @@ def logout():
 
 
 @app.route('/')
-def main_page():
-    should_redirect, lp_url, is_authorized = process_launchpad_authorization()
-    if should_redirect:
-        return redirect(lp_url)
+@launchpad_auth_required
+def main_page(is_authorized=False):
     global_statistic = dict.fromkeys(db.prs)
     for pr in global_statistic.keys()[:]:
         types = dict.fromkeys(["total", "critical", "unresolved"])
@@ -651,6 +656,7 @@ def main_page():
         global_statistic['{0}'.format(pr)] = types
 
     return render_template("main.html",
+                           is_authorized=is_authorized,
                            key_milestone=key_milestone,
                            statistic=global_statistic,
                            prs=list(db.prs),
