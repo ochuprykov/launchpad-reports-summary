@@ -329,16 +329,10 @@ def code_freeze_report(milestone_name):
         exclude_tags=exclude_tags)
 
     for team in bugs_private.keys():
-        try:
-            for bug in bugs_private[team]["bugs"]:
-                bugs[team]["bugs"].append(bug)
-        except KeyError:
-            pass
+        for bug in bugs_private[team]["bugs"]:
+            bugs[team]["bugs"].append(bug)
     for team in bugs_private.keys():
-        try:
-            bugs[team]["count"] += bugs_private[team]["count"]
-        except KeyError:
-            pass
+        bugs[team]["count"] += bugs_private[team]["count"]
 
     return render_template("code_freeze_report.html",
                            milestones=milestones,
