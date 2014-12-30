@@ -145,6 +145,10 @@ tr.critical-bugs {
   color: red !important
 }
 
+tr.private-bugs {
+  color: green !important
+}
+
 th.headerSortUp {
     background: #428bca url(https://cdn4.iconfinder.com/data/icons/ionicons/512/icon-arrow-up-b-16.png);
     background-repeat: no-repeat;
