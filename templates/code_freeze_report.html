@@ -45,7 +45,11 @@
 
                 <tbody>
                 {% for b in bugs[team]["bugs"] %}
-                <tr {% if b["visibility"] == "Private" %}class="bug_row private-bugs"{% endif %} id="{{ b.id }}">
+                <tr {% if b["visibility"] == "Private" %}class="bug_row private-bugs"
+                    {% elif b["visibility"] == "Private Security" %}class="bug_row private-security-bugs"
+                    {% elif b["visibility"] == "Proprietary" %}class="bug_row proprietary-bugs"
+                    {% else  %}class="bug_row"{% endif %}
+                    id="{{ b.id }}">
                     <td><a href="{{ b.web_link }}">{{ b.id }}</a></td>
                     <td>{{ b.title }}</td>
                     <td>{{ b.milestone }}</td>
@@ -80,7 +84,11 @@
                     <tbody>
 
                     {% for b in bugs[teams[i]]["bugs"] %}
-                    <tr class="bug_row" id="{{ b.id }}">
+                    <tr {% if b["visibility"] == "Private" %}class="bug_row private-bugs"
+                        {% elif b["visibility"] == "Private Security" %}class="bug_row private-security-bugs"
+                        {% elif b["visibility"] == "Proprietary" %}class="bug_row proprietary-bugs"
+                        {% else  %}class="bug_row"{% endif %}
+                        id="{{ b.id }}">
                         <td><a href="{{ b.web_link }}">{{ b.id }}</a></td>
                         <td>{{ b.title }}</td>
                         <td>{{ b.milestone }}</td>
