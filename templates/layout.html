@@ -82,11 +82,20 @@
                             </ul>
                       </ul>
 
-                      <ul class="nav navbar-nav navbar-right">
+                      <ul class="nav navbar-nav navbar-left">
                           <li>
                               <a id="toggler" href="/">Last update<div id="clock">{{t}}</div></a>
                           </li>
                           <li><a href="/"></a></li>
+                      </ul>
+                      <ul class="nav navbar-nav navbar-right">
+                          <li>
+                            {% if not is_authorized %}
+                            <form method="post" action="/login">
+                              <input type="submit" name="auth" value="Authorize">
+                            </form>
+                            {% endif %}
+                          </li>
                       </ul>
                   </div>
               </div>

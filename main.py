@@ -37,52 +37,76 @@ flag = False
 user_agents = {}
 
 
+def get_access_token(credentials):
+    global user_agents
+    credentials._request_token = AccessToken.from_params(
+        session['request_token_parts'])
+    request_token_key = credentials._request_token.key
+    try:
+        credentials.exchange_request_token_for_access_token(LPNET_WEB_ROOT)
+    except:
+        auth_url = authorization_url(LPNET_WEB_ROOT,
+                                     request_token=request_token_key)
+        return (True, auth_url, False)
+    user_agents[credentials.access_token.key] = LaunchpadClient(credentials)
+    session['access_token_parts'] = {
+        'oauth_token': credentials.access_token.key,
+        'oauth_token_secret': credentials.access_token.secret,
+        'lp.context': credentials.access_token.context
+    }
+    is_authorized = True
+    session['is_authorized'] = is_authorized
+    del session['request_token_parts']
+    return (False, None, is_authorized)
+
+
+def use_access_token(credentials):
+    global user_agents
+    if not session['access_token_parts']['oauth_token'] in user_agents:
+        credentials.access_token = AccessToken.from_params(
+            session['access_token_parts'])
+        user_agents[credentials.access_token.key] = LaunchpadClient(credentials)
+    is_authorized = True
+    session['is_authorized'] = is_authorized
+    return (False, None, is_authorized)
+
+
+def get_and_authorize_request_token(credentials):
+    credentials.get_request_token(
+        web_root=LPNET_WEB_ROOT)
+    request_token_key = credentials._request_token.key
+    request_token_secret = credentials._request_token.secret
+    request_token_context = credentials._request_token.context
+    session['request_token_parts'] = {
+        'oauth_token': request_token_key,
+        'oauth_token_secret': request_token_secret,
+        'lp.context': request_token_context
+    }
+    auth_url = authorization_url(LPNET_WEB_ROOT,
+                                 request_token=request_token_key)
+    is_authorized = False
+    session['is_authorized'] = is_authorized
+    return (True, auth_url, is_authorized)
+
+
 def process_launchpad_authorization():
     global user_agents
     credentials = Credentials()
     SimpleLaunchpad.set_credentials_consumer(credentials,
                                              "launchpad-reporting-www")
-    if 'request_token_parts' in session:
-        credentials._request_token = AccessToken.from_params(
-            session['request_token_parts'])
-        request_token_key = credentials._request_token.key
-        try:
-            credentials.exchange_request_token_for_access_token(LPNET_WEB_ROOT)
-        except:
-            auth_url = authorization_url(LPNET_WEB_ROOT,
-                                         request_token=request_token_key)
-            return (True, auth_url, False)
-        user_agents[credentials.access_token.key] = LaunchpadClient(credentials)
-        session['access_token_parts'] = {
-            'oauth_token': credentials.access_token.key,
-            'oauth_token_secret': credentials.access_token.secret,
-            'lp.context': credentials.access_token.context
-        }
-        del session['request_token_parts']
-        return (False, None, True)
-    elif 'access_token_parts' in session:
-        if not session['access_token_parts']['oauth_token'] in user_agents:
-            credentials.access_token = AccessToken.from_params(
-                session['access_token_parts'])
-            user_agents[credentials.access_token.key] = LaunchpadClient(credentials)
-        return (False, None, True)
+    if 'should_authorize' in session and session['should_authorize']:
+        if 'request_token_parts' in session:
+            return get_access_token(credentials)
+        elif 'access_token_parts' in session:
+            return use_access_token(credentials)
+        else:
+            return get_and_authorize_request_token(credentials)
     else:
-        credentials.get_request_token(
-            web_root=LPNET_WEB_ROOT)
-        request_token_key = credentials._request_token.key
-        request_token_secret = credentials._request_token.secret
-        request_token_context = credentials._request_token.context
-        session['request_token_parts'] = {
-            'oauth_token': request_token_key,
-            'oauth_token_secret': request_token_secret,
-            'lp.context': request_token_context
-        }
-        auth_url = authorization_url(LPNET_WEB_ROOT,
-                                     request_token=request_token_key)
-        return (True, auth_url, False)
+        return (False, None, False)
 
 
-def launchpad_auth_required(f):
+
+def handle_launchpad_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         should_redirect, lp_url, is_authorized = process_launchpad_authorization()
@@ -107,7 +131,7 @@ def launchpad_auth_required(f):
 
 @app.route('/project/<project_name>/bug_table_for_status/<bug_type>/'
            '<milestone_name>/bug_list/')
-@launchpad_auth_required
+@handle_launchpad_auth
 def bug_list(project_name, bug_type, milestone_name, is_authorized=False):
     project = launchpad.get_project(project_name)
     tags = None
@@ -136,7 +160,7 @@ def bug_list(project_name, bug_type, milestone_name, is_authorized=False):
 
 @app.route('/project/<project_name>/bug_list_for_sbpr/<milestone_name>/'
            '<bug_type>/<sbpr>')
-@launchpad_auth_required
+@handle_launchpad_auth
 def bug_list_for_sbpr(project_name, bug_type, milestone_name, sbpr, is_authorized=False):
     subprojects = [sbpr]
 
@@ -187,7 +211,7 @@ def bug_list_for_sbpr(project_name, bug_type, milestone_name, sbpr, is_authorize
 
 
 @app.route("/iso_build/<version>/<iso_number>/<result>")
-@launchpad_auth_required
+@handle_launchpad_auth
 def iso_build_result(version, iso_number, result, is_authorized=False):
     data = {"version": version, "iso_number": iso_number,
             "build_date": time.strftime("%d %b %Y %H:%M:%S", time.gmtime()),
@@ -205,7 +229,7 @@ def iso_build_result(version, iso_number, result, is_authorized=False):
 
 
 @app.route("/iso_tests/<version>/<iso_number>/<tests_name>/<result>")
-@launchpad_auth_required
+@handle_launchpad_auth
 def iso_tests_result(version, iso_number, tests_name, result, is_authorized=False):
     status = "FAIL"
 
@@ -232,7 +256,7 @@ def iso_tests_result(version, iso_number, tests_name, result, is_authorized=Fals
 
 
 @app.route('/mos_images/<version>/')
-@launchpad_auth_required
+@handle_launchpad_auth
 def mos_images_status(version, is_authorized=False):
     images = list(db.mos.images.find())
     tests_types = list(db.mos.tests_types.find())
@@ -246,7 +270,7 @@ def mos_images_status(version, is_authorized=False):
 
 
 @app.route('/mos_images_auto/<version>/')
-@launchpad_auth_required
+@handle_launchpad_auth
 def mos_images_status_auto(version, is_authorized=False):
     images = list(db.mos.images.find())
     tests_types = list(db.mos.tests_types.find())
@@ -261,7 +285,7 @@ def mos_images_status_auto(version, is_authorized=False):
 
 @app.route('/project/<project_name>/api/release_chart_trends/'
            '<milestone_name>/get_data')
-@launchpad_auth_required
+@handle_launchpad_auth
 def bug_report_trends_data(project_name, milestone_name, is_authorized=False):
     data = launchpad.release_chart(
         project_name,
@@ -273,7 +297,7 @@ def bug_report_trends_data(project_name, milestone_name, is_authorized=False):
 
 @app.route('/project/<project_name>/api/release_chart_incoming_outgoing/'
            '<milestone_name>/get_data')
-@launchpad_auth_required
+@handle_launchpad_auth
 def bug_report_get_incoming_outgoing_data(project_name, milestone_name, is_authorized=False):
     data = launchpad.release_chart(
         project_name,
@@ -284,7 +308,7 @@ def bug_report_get_incoming_outgoing_data(project_name, milestone_name, is_autho
 
 @app.route('/project/<project_name>/bug_table_for_status/'
            '<bug_type>/<milestone_name>')
-@launchpad_auth_required
+@handle_launchpad_auth
 def bug_table_for_status(project_name, bug_type, milestone_name, is_authorized=False):
     project = launchpad.get_project(project_name)
 
@@ -301,7 +325,7 @@ def bug_table_for_status(project_name, bug_type, milestone_name, is_authorized=F
 
 
 @app.route('/project/<project_name>/bug_trends/<milestone_name>/')
-@launchpad_auth_required
+@handle_launchpad_auth
 def bug_trends(project_name, milestone_name, is_authorized=False):
     project = launchpad.get_project(project_name)
     return render_template("bug_trends.html",
@@ -315,7 +339,7 @@ def bug_trends(project_name, milestone_name, is_authorized=False):
 
 
 @app.route('/project/code_freeze_report/<milestone_name>/')
-@launchpad_auth_required
+@handle_launchpad_auth
 def code_freeze_report(milestone_name, is_authorized=False):
     milestones = db.bugs.milestones.find_one()["Milestone"]
     teams = ["Fuel", "Partners", "mos-linux", "mos-openstack", "Unknown"]
@@ -335,17 +359,18 @@ def code_freeze_report(milestone_name, is_authorized=False):
             exclude_tags=exclude_tags)
 
     # private bugs PoC here
-    oauth_token = session['access_token_parts']['oauth_token']
-    bugs_private = user_agents[oauth_token].code_freeze_statistic(
-        milestone=[milestone_name],
-        teams=teams,
-        exclude_tags=exclude_tags)
+    if is_authorized:
+        oauth_token = session['access_token_parts']['oauth_token']
+        bugs_private = user_agents[oauth_token].code_freeze_statistic(
+            milestone=[milestone_name],
+            teams=teams,
+            exclude_tags=exclude_tags)
 
-    for team in bugs_private.keys():
-        for bug in bugs_private[team]["bugs"]:
-            bugs[team]["bugs"].append(bug)
-    for team in bugs_private.keys():
-        bugs[team]["count"] += bugs_private[team]["count"]
+        for team in bugs_private.keys():
+            for bug in bugs_private[team]["bugs"]:
+                bugs[team]["bugs"].append(bug)
+        for team in bugs_private.keys():
+            bugs[team]["count"] += bugs_private[team]["count"]
 
     return render_template("code_freeze_report.html",
                            is_authorized=is_authorized,
@@ -359,7 +384,7 @@ def code_freeze_report(milestone_name, is_authorized=False):
 
 
 @app.route('/project/<project_name>/<milestone_name>/project_statistic/<tag>/')
-@launchpad_auth_required
+@handle_launchpad_auth
 def statistic_for_project_by_milestone_by_tag(project_name, milestone_name,
                                               tag, is_authorized=False):
     display = True
@@ -394,7 +419,7 @@ def statistic_for_project_by_milestone_by_tag(project_name, milestone_name,
 
 
 @app.route('/project/<project_name>/<milestone_name>/project_statistic/')
-@launchpad_auth_required
+@handle_launchpad_auth
 def statistic_for_project_by_milestone(project_name, milestone_name, is_authorized=False):
     display = False
     project = launchpad.get_project(project_name)
@@ -428,7 +453,7 @@ def statistic_for_project_by_milestone(project_name, milestone_name, is_authoriz
 
 
 @app.route('/project/fuelplusmos/<milestone_name>/')
-@launchpad_auth_required
+@handle_launchpad_auth
 def fuel_plus_mos_overview(milestone_name, is_authorized=False):
     milestones = db.bugs.milestones.find_one()["Milestone"]
 
@@ -567,7 +592,7 @@ def fuel_plus_mos_overview(milestone_name, is_authorized=False):
 
 
 @app.route('/project/<project_name>/')
-@launchpad_auth_required
+@handle_launchpad_auth
 def project_overview(project_name, is_authorized=False):
     should_redirect, lp_url, is_authorized = process_launchpad_authorization()
     if should_redirect:
@@ -603,7 +628,7 @@ def project_overview(project_name, is_authorized=False):
 
 
 @app.route('/project/<global_project_name>/<tag>/')
-@launchpad_auth_required
+@handle_launchpad_auth
 def mos_project_overview(global_project_name, tag, is_authorized=False):
     global_project_name = global_project_name.lower()
     tag = tag.lower()
@@ -634,11 +659,18 @@ def logout():
         del session['request_token_parts']
     if 'access_token_parts' in session:
         del session['access_token_parts']
+    session['should_authorize'] = False
     return redirect(url_for('main_page'))
 
 
-@app.route('/')
-@launchpad_auth_required
+@app.route('/login', methods=["GET", "POST"])
+def login(is_authorized=False):
+    session['should_authorize'] = True
+    return redirect(url_for('main_page'))
+
+
+@app.route('/', methods=["GET", "POST"])
+@handle_launchpad_auth
 def main_page(is_authorized=False):
     global_statistic = dict.fromkeys(db.prs)
     for pr in global_statistic.keys()[:]:
