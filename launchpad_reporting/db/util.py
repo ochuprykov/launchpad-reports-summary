@@ -56,12 +56,13 @@ def serialize_bug(bug, task=None):
         'date_triaged': process_date(bug.date_triaged)
     }
 
+    bug_assignee_link = bug.assignee_link
     if task:
         bug_item = task.bug
-        bug_assignee = str(bug.assignee_link).split("~")[1] \
-            if bug.assignee_link else None
-        bug_assignee_link = bug.assignee_link \
-            if bug.assignee_link else None
+        bug_assignee = str(bug_assignee_link).split("~")[1] \
+            if bug_assignee_link else None
+        bug_assignee_link = bug_assignee_link \
+            if bug_assignee_link else None
         bug_milestone = str(bug.milestone_link).split("/")[-1]
         bug_milestone_link = bug.milestone_link
         bug_owner = str(bug.owner_link).split("~")[1]

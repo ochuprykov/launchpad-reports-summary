@@ -451,13 +451,13 @@ class LaunchpadData(LaunchpadAnonymousData):
         for pr in project_names:
             bugs = self.get_all_bugs_by(pr, milestone)
             bugs = [bug for bug in bugs
+                    if bug.importance in ["High", "Critical"]]
+            bugs = [bug for bug in bugs
                     if bug.status in self.BUG_STATUSES["NotDone"]]
             bugs = [bug for bug in bugs
                     if bug.milestone.name == milestone[0]]
             bugs = [bug for bug in bugs
                     if len(set(bug.bug.tags).difference(set(exclude_tags))) > 0]
-            bugs = [bug for bug in bugs
-                    if bug.importance in ["High", "Critical"]]
             projects_private_bugs[pr] = bugs
 
         for team in teams:
