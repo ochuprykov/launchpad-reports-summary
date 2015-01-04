@@ -3,7 +3,7 @@
 import copy
 import datetime
 import logging
-import pymongo
+from pymongo import MongoClient
 import time
 import os
 
@@ -310,7 +310,7 @@ class LaunchpadAnonymousData(object):
         return page_statistic
 
     def code_freeze_statistic(self, milestone, teams, exclude_tags):
-        connection = pymongo.Connection()
+        connection = MongoClient()
         assignees_db = connection["assignees"]
 
         report = dict.fromkeys(teams)
@@ -427,7 +427,7 @@ class LaunchpadData(LaunchpadAnonymousData):
             print e
 
     def code_freeze_statistic(self, milestone, teams, exclude_tags):
-        connection = pymongo.Connection()
+        connection = MongoClient()
         assignees_db = connection["assignees"]
 
         report = dict.fromkeys(teams)
